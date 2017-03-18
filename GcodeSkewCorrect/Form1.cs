@@ -19,10 +19,12 @@ namespace GcodeSkewCorrect
             InitializeComponent();
 
         }
+
         private double DegreeToRadian(double angle)
         {
-            return Math.PI * angle / 180.0;
+            return Math.PI*angle/180.0;
         }
+
         private void label1_Click(object sender, EventArgs e)
         {
 
@@ -30,25 +32,25 @@ namespace GcodeSkewCorrect
 
         private void buttonOpen_Click(object sender, EventArgs e)
         {
-            OpenFileDialog openFileDialog1 = new OpenFileDialog();
+            OpenFileDialog fileDialog1 = new OpenFileDialog();
 
-            openFileDialog1.InitialDirectory = @"E:\Autodesk\STL";
-            openFileDialog1.Title = "Browse Gcode files";
+            fileDialog1.InitialDirectory = @"E:\Autodesk\STL";
+            fileDialog1.Title = "Browse Gcode files";
 
-            openFileDialog1.CheckFileExists = true;
-            openFileDialog1.CheckPathExists = true;
+            fileDialog1.CheckFileExists = true;
+            fileDialog1.CheckPathExists = true;
 
-            openFileDialog1.DefaultExt = "gcode";
-            openFileDialog1.Filter = "G-code (*.gcode)|*.gcode|All files (*.*)|*.*";
-            openFileDialog1.FilterIndex = 2;
-            openFileDialog1.RestoreDirectory = true;
+            fileDialog1.DefaultExt = "gcode";
+            fileDialog1.Filter = "G-code (*.gcode)|*.gcode|All files (*.*)|*.*";
+            fileDialog1.FilterIndex = 2;
+            fileDialog1.RestoreDirectory = true;
 
-            openFileDialog1.ReadOnlyChecked = true;
-            openFileDialog1.ShowReadOnly = true;
+            fileDialog1.ReadOnlyChecked = true;
+            fileDialog1.ShowReadOnly = true;
 
-            if (openFileDialog1.ShowDialog() == DialogResult.OK)
+            if (fileDialog1.ShowDialog() == DialogResult.OK)
             {
-                tbOrigGcode.Text = openFileDialog1.FileName;
+                tbOrigGcode.Text = fileDialog1.FileName;
             }
 
         }
@@ -59,24 +61,26 @@ namespace GcodeSkewCorrect
             string line;
             string newline;
 
-            double yMultiplier = Math.Round(Math.Tan((DegreeToRadian(Convert.ToDouble(tbXY.Text)))),3); //calculate the trigo stuff once to save precious process time
+            double yMultiplier = Math.Round(Math.Tan((DegreeToRadian(Convert.ToDouble(tbXY.Text)))), 3);
+            //calculate the trigo stuff once to save precious process time
 
             // Read the file and display it line by line.
             System.IO.StreamReader file = new System.IO.StreamReader(tbOrigGcode.Text);
             System.IO.StreamWriter file2 = new System.IO.StreamWriter("D:\\SkewCorrectedOutput.gcode");
 
-            file2.WriteLine("; Original unconverted filename:");
-            file2.WriteLine("; "+ tbOrigGcode.Text);
-            file2.WriteLine("; XY°=" + tbXY.Text);
-            file2.WriteLine("; ZX°=" + tbZX.Text);
-            file2.WriteLine("; ZY°=" + tbZY.Text);
-            file2.WriteLine("; Converted by GcodeSkewCorrect (c) Attila Csiki 2017");
+            file2.WriteLine(";Original unconverted filename:");
+            file2.WriteLine(";" + tbOrigGcode.Text);
+            file2.WriteLine(";XY°=" + tbXY.Text);
+            file2.WriteLine(";ZX°=" + tbZX.Text);
+            file2.WriteLine(";ZY°=" + tbZY.Text);
+            file2.WriteLine(";Converted by GcodeSkewCorrect (c) Attila Csiki 2017");
 
             while ((line = file.ReadLine()) != null) //do it until end of file
             {
                 newline = line;
                 var splitted = line.Split(' '); //splitting the line into words
-                if (splitted[0].StartsWith("G1")) // only G1 commands are important so if first word is G1 then
+                if (splitted[0].StartsWith("G1") || splitted[0].StartsWith("G0"))
+                    // only G1 and G0 commands are important so if first word is G1 or G0 then
                 {
                     //initializing line level variables
                     //double newX = 0;
@@ -85,16 +89,34 @@ namespace GcodeSkewCorrect
                     var oldY = "";
                     var oldF = "";
                     var oldE = "";
+                    var gString = "";
+                    var xString = "";
+                    var yString = "";
+                    var fString = "";
+                    var eString = "";
+                    var zString = "";
+
                     char c = new char();
                     bool isF = false;
                     bool isX = false;
                     bool isY = false;
                     bool isE = false;
+                    bool isZ = false;
 
                     isF = false;
                     isX = false;
                     isY = false;
                     isE = false;
+
+                    if (splitted[0].StartsWith("G1"))
+                    {
+                        gString = "G1";
+                    }
+
+                    if (splitted[0].StartsWith("G0"))
+                    {
+                        gString = "G0";
+                    }
 
                     for (int i = 1; i < splitted.Count(); i++) //going through all relevant values
                     {
@@ -108,6 +130,7 @@ namespace GcodeSkewCorrect
                                 case 'F':
                                     oldF = splitted[i].TrimStart('F');
                                     isF = true;
+                                    fString = " " + splitted[i];
                                     break;
                                 case 'X':
                                     oldX = splitted[i].TrimStart('X');
@@ -117,8 +140,13 @@ namespace GcodeSkewCorrect
                                     oldY = splitted[i].TrimStart('Y');
                                     isY = true;
                                     break;
+                                case 'Z':
+                                    zString = " " + splitted[i];
+                                    isZ = true;
+                                    break;
                                 case 'E':
                                     oldE = splitted[i].TrimStart('E');
+                                    eString = " " + splitted[i];
                                     isE = true;
                                     break;
                                 default:
@@ -127,30 +155,25 @@ namespace GcodeSkewCorrect
 
 
                         }
-                    }
 
-                    if (isX & isY & isE)
-                    {
-                        double a = double.Parse(oldY, System.Globalization.CultureInfo.InvariantCulture);
-                        double b = double.Parse(oldX, System.Globalization.CultureInfo.InvariantCulture);
-                        double m = yMultiplier;
-                        newY = a - (b * m);
 
-                        if (isF)
+                        if (isX & isY)
                         {
-                            newline = "G1 " + "F" + oldF + " " + "X" + oldX + " " + "Y" + Math.Round(newY, 3).ToString().Replace(',','.') + " " + "E" + oldE;
+                            double a = double.Parse(oldY, System.Globalization.CultureInfo.InvariantCulture);
+                            double b = double.Parse(oldX, System.Globalization.CultureInfo.InvariantCulture);
+                            double m = yMultiplier;
+                            xString = " X" + oldX;
+                            newY = a - (b*m);
+                            yString = " Y" + Math.Round(newY, 3).ToString().Replace(',', '.');
+
+                            newline = gString + fString + xString + yString + zString + eString;
+
                         }
                         else
                         {
-                            newline = "G1 " + "X" + oldX + " " + "Y" + Math.Round(newY, 3).ToString().Replace(',', '.') + " " + "E" + oldE;
+                            newline = line;
                         }
-
                     }
-
-                }
-                else
-                {
-                    newline = line;
                 }
 
                 file2.WriteLine(newline);
@@ -161,7 +184,7 @@ namespace GcodeSkewCorrect
             file.Close();
             file2.Close();
 
-            MessageBox.Show("File is converted. Rejoice in teh Lord!", "Breaking news");
+            MessageBox.Show("File is converted. Rejoice in the Lord!", "Breaking news");
 
             // Suspend the screen.
             Console.ReadLine();
